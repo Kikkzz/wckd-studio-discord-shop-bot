@@ -1,0 +1,15 @@
+{
+  "name": "wckd-studio-bot",
+  "version": "1.0.0",
+  "description": "WCKD STUDIO Discord shop bot - price list, guided ordering, and ticket creation",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  }
+}
