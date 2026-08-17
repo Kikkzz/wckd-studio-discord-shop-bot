@@ -17,12 +17,17 @@ function priceListEmbed() {
           '**COUPLE** — ₱350',
           '↳ +₱250 Graphic Design',
           '',
+          '**FAMILY** — ₱600',
+          '↳ Max. 5 members',
+          '↳ +₱250 Graphic Design',
+          '↳ +₱50 for XML Creation',
+          '',
           '**GROUP / GANG** — starts at ₱1,000',
           '↳ Max. 10 members',
           '↳ +₱30 per extra member',
           '↳ +₱50 per character with tattoos',
           '↳ +₱500 Graphic Design',
-          '↳ XML available? Send it with your order.',
+          '↳ +₱50 for XML Creation',
           '',
           '**FAMILY** — ₱500',
           '↳ Max. 5 members',
@@ -35,7 +40,7 @@ function priceListEmbed() {
       },
       {
         name: '🎨 Add-ons',
-        value: ['Tattoos — +₱50 / character', 'XML Creation — +₱100 / character'].join('\n'),
+        value: ['Tattoos — +₱50 / character', 'XML Creation — +₱50 / character'].join('\n'),
       }
     )
     .setFooter({
