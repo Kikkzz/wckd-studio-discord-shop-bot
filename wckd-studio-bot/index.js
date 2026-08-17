@@ -26,6 +26,7 @@ const {
   STAFF_LOG_CHANNEL_ID,
   TICKET_CATEGORY_ID,
   STAFF_ROLE_IDS,
+  PRICELIST_CHANNEL_ID,
 } = process.env;
 
 // Support one or more staff role IDs, comma-separated in .env
@@ -81,8 +82,8 @@ function serviceSelectRow() {
     .addOptions(
       { label: 'Solo — ₱250', value: 'solo', emoji: '📸' },
       { label: 'Couple — ₱350', value: 'couple', emoji: '📸' },
-      { label: 'Family — ₱600', value: 'family', emoji: '👨‍👩‍👧‍👦' },
       { label: 'Group / Gang — from ₱1,000', value: 'group', emoji: '👥' },
+      { label: 'Family — ₱500', value: 'family', emoji: '👨‍👩‍👧‍👦' },
       { label: 'Video Edit — DM for Quote', value: 'video', emoji: '🎬' }
     );
   return new ActionRowBuilder().addComponents(menu);
@@ -202,9 +203,66 @@ function confirmCancelRow() {
   );
 }
 
+// ---------- Daily price list auto-post (12:00 AM Philippine time = 16:00 UTC) ----------
+const PHT_POST_UTC_HOUR = 16; // Asia/Manila is UTC+8 with no DST, so midnight PHT = 16:00 UTC the day before
+const PRICELIST_EMBED_TITLE = '🖤 WCKD STUDIO — PRICE LIST';
+let lastPriceListMessageId = null;
+
+function msUntilNextUtcHour(hour) {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0, 0));
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+  return next - now;
+}
+
+async function deletePreviousPriceListMessage(channel) {
+  // Prefer the ID we tracked in memory from the last post this process made.
+  if (lastPriceListMessageId) {
+    const msg = await channel.messages.fetch(lastPriceListMessageId).catch(() => null);
+    if (msg) await msg.delete().catch((err) => console.error('Failed to delete previous price list message:', err));
+    lastPriceListMessageId = null;
+    return;
+  }
+
+  // Fallback (e.g. after a bot restart, when we don't have it in memory anymore):
+  // scan recent history for the bot's own price list embed and delete that.
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!messages) return;
+  const previous = messages.find((m) => m.author.id === client.user.id && m.embeds[0]?.title === PRICELIST_EMBED_TITLE);
+  if (previous) await previous.delete().catch((err) => console.error('Failed to delete previous price list message:', err));
+}
+
+async function postDailyPriceList() {
+  if (!PRICELIST_CHANNEL_ID) return;
+  const channel = await client.channels.fetch(PRICELIST_CHANNEL_ID).catch(() => null);
+  if (!channel) {
+    console.error('PRICELIST_CHANNEL_ID is set but the channel could not be found/accessed.');
+    return;
+  }
+
+  await deletePreviousPriceListMessage(channel);
+
+  const sent = await channel.send({ embeds: [priceListEmbed()] }).catch((err) => {
+    console.error('Failed to post daily price list:', err);
+    return null;
+  });
+  if (sent) lastPriceListMessageId = sent.id;
+}
+
+function scheduleDailyPriceList() {
+  if (!PRICELIST_CHANNEL_ID) return;
+  const delay = msUntilNextUtcHour(PHT_POST_UTC_HOUR);
+  console.log(`Daily price list scheduled — next post in ${Math.round(delay / 1000 / 60)} minutes.`);
+  setTimeout(() => {
+    postDailyPriceList();
+    setInterval(postDailyPriceList, 24 * 60 * 60 * 1000);
+  }, delay);
+}
+
 // ---------- Client ready ----------
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
+  scheduleDailyPriceList();
 });
 
 // ---------- Interaction handling ----------
