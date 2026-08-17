@@ -21,6 +21,7 @@ function priceListEmbed() {
           '↳ Max. 5 members',
           '↳ +₱250 Graphic Design',
           '↳ +₱50 for XML Creation',
+          '↳ +₱50 for additional tattoos of your choice',
           '',
           '**GROUP / GANG** — starts at ₱1,000',
           '↳ Max. 10 members',
