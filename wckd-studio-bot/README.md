@@ -16,7 +16,7 @@ channel with a full order summary for staff.
   - Solo ₱250, Couple ₱350, Family ₱500 (max 5), Group ₱1,000 (max 10, +₱30/extra member)
   - Graphic Design add-on per service
   - Tattoos +₱50/character
-  - XML Creation +₱100/character (Group orders)
+  - XML Creation +₱50/character (Group orders)
   - Video Edit routes straight to a "DM for Quote" ticket with the customer's project details
 - On confirm, the bot:
   - Posts the order to a staff log channel (optional)
