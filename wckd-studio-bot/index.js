@@ -81,8 +81,8 @@ function serviceSelectRow() {
     .addOptions(
       { label: 'Solo — ₱250', value: 'solo', emoji: '📸' },
       { label: 'Couple — ₱350', value: 'couple', emoji: '📸' },
-      { label: 'Group / Gang — from ₱1,000', value: 'group', emoji: '👥' },
       { label: 'Family — ₱600', value: 'family', emoji: '👨‍👩‍👧‍👦' },
+      { label: 'Group / Gang — from ₱1,000', value: 'group', emoji: '👥' },
       { label: 'Video Edit — DM for Quote', value: 'video', emoji: '🎬' }
     );
   return new ActionRowBuilder().addComponents(menu);
