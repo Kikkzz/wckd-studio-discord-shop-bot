@@ -162,10 +162,17 @@ function buildModal(service) {
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setPlaceholder('yes or no');
+    const xml = new TextInputBuilder()
+      .setCustomId('xmlCount')
+      .setLabel('XML Creation - how many characters?')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('0 (leave 0 if you already have XML)');
     rows.push(
       new ActionRowBuilder().addComponents(members),
       new ActionRowBuilder().addComponents(tattoos),
-      new ActionRowBuilder().addComponents(design)
+      new ActionRowBuilder().addComponents(design),
+      new ActionRowBuilder().addComponents(xml)
     );
   }
 
@@ -356,7 +363,7 @@ client.on('interactionCreate', async (interaction) => {
         opts.memberCount = parseInt(memberRaw, 10) || (service === 'group' ? 10 : 5);
       }
 
-      if (service === 'group') {
+      if (service === 'group' || service === 'family') {
         const xmlRaw = interaction.fields.getTextInputValue('xmlCount');
         opts.xmlCount = xmlRaw ? parseInt(xmlRaw, 10) || 0 : 0;
       }

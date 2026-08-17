@@ -51,32 +51,6 @@ function calculatePrice(service, opts = {}) {
       break;
     }
 
-  
-    case 'family': {
-      const memberCount = Math.min(5, Math.max(1, Number(opts.memberCount) || 5));
-      total += 600;
-      breakdown.push(['Family Photo (up to 5 members)', 500]);
-
-      if (memberCount > 5) {
-        const extraMembers = memberCount - 5;
-        const cost = extraMembers * 30;
-        total += cost;
-        breakdown.push([`Extra Members (${extraMembers})`, cost]);
-      }
-
-      if (opts.graphicDesign) {
-        total += 250;
-        breakdown.push(['Graphic Design', 250]);
-      }
-
-      if (tattooCount > 0) {
-        const cost = tattooCount * 50;
-        total += cost;
-        breakdown.push([`Tattoos (${tattooCount} character${tattooCount > 1 ? 's' : ''})`, cost]);
-      }
-      break;
-    }
-
     case 'group': {
       const memberCount = Math.max(1, Number(opts.memberCount) || 10);
       total += 1000;
@@ -84,7 +58,7 @@ function calculatePrice(service, opts = {}) {
 
       if (memberCount > 10) {
         const extraMembers = memberCount - 10;
-        const cost = extraMembers * 30;
+        const cost = extraMembers * 100;
         total += cost;
         breakdown.push([`Extra Members (${extraMembers})`, cost]);
       }
@@ -108,6 +82,29 @@ function calculatePrice(service, opts = {}) {
       break;
     }
 
+    case 'family': {
+      const memberCount = Math.min(5, Math.max(1, Number(opts.memberCount) || 5));
+      total += 600;
+      breakdown.push(['Family Photo (up to 5 members)', 600]);
+
+      if (opts.graphicDesign) {
+        total += 250;
+        breakdown.push(['Graphic Design', 250]);
+      }
+
+      if (tattooCount > 0) {
+        const cost = tattooCount * 50;
+        total += cost;
+        breakdown.push([`Tattoos (${tattooCount} character${tattooCount > 1 ? 's' : ''})`, cost]);
+      }
+
+      if (xmlCount > 0) {
+        const cost = xmlCount * 50;
+        total += cost;
+        breakdown.push([`XML Creation (${xmlCount} character${xmlCount > 1 ? 's' : ''})`, cost]);
+      }
+      break;
+    }
 
     case 'video': {
       // No fixed price - handled separately as a quote request.

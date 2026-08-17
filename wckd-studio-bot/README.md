@@ -1,5 +1,4 @@
 # WCKD STUDIO Discord Shop Bot
-# made by koba 
 
 A Discord bot (Node.js + discord.js v14) for **WCKD STUDIO**. It posts your price
 list, walks customers through a guided order flow with buttons/select menus/modals,
@@ -16,7 +15,7 @@ channel with a full order summary for staff.
   - Solo ₱250, Couple ₱350, Family ₱500 (max 5), Group ₱1,000 (max 10, +₱30/extra member)
   - Graphic Design add-on per service
   - Tattoos +₱50/character
-  - XML Creation +₱50/character (Group orders)
+  - XML Creation +₱100/character (Group orders)
   - Video Edit routes straight to a "DM for Quote" ticket with the customer's project details
 - On confirm, the bot:
   - Posts the order to a staff log channel (optional)
