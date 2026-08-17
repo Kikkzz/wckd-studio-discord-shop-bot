@@ -28,10 +28,6 @@ function priceListEmbed() {
           '↳ +₱50 per character with tattoos',
           '↳ +₱500 Graphic Design',
           '↳ +₱50 for XML Creation',
-          '',
-          '**FAMILY** — ₱500',
-          '↳ Max. 5 members',
-          '↳ +₱250 Graphic Design',
         ].join('\n'),
       },
       {
