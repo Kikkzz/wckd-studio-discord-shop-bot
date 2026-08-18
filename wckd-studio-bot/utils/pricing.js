@@ -51,6 +51,30 @@ function calculatePrice(service, opts = {}) {
       break;
     }
 
+    case 'family': {
+      const memberCount = Math.min(5, Math.max(1, Number(opts.memberCount) || 5));
+      total += 600;
+      breakdown.push(['Family Photo (up to 5 members)', 600]);
+
+      if (opts.graphicDesign) {
+        total += 250;
+        breakdown.push(['Graphic Design', 250]);
+      }
+
+      if (tattooCount > 0) {
+        const cost = tattooCount * 50;
+        total += cost;
+        breakdown.push([`Tattoos (${tattooCount} character${tattooCount > 1 ? 's' : ''})`, cost]);
+      }
+
+      if (xmlCount > 0) {
+        const cost = xmlCount * 50;
+        total += cost;
+        breakdown.push([`XML Creation (${xmlCount} character${xmlCount > 1 ? 's' : ''})`, cost]);
+      }
+      break;
+    }
+
     case 'group': {
       const memberCount = Math.max(1, Number(opts.memberCount) || 10);
       total += 1000;
@@ -72,30 +96,6 @@ function calculatePrice(service, opts = {}) {
       if (opts.graphicDesign) {
         total += 500;
         breakdown.push(['Graphic Design', 500]);
-      }
-
-      if (xmlCount > 0) {
-        const cost = xmlCount * 50;
-        total += cost;
-        breakdown.push([`XML Creation (${xmlCount} character${xmlCount > 1 ? 's' : ''})`, cost]);
-      }
-      break;
-    }
-
-    case 'family': {
-      const memberCount = Math.min(5, Math.max(1, Number(opts.memberCount) || 5));
-      total += 600;
-      breakdown.push(['Family Photo (up to 5 members)', 600]);
-
-      if (opts.graphicDesign) {
-        total += 250;
-        breakdown.push(['Graphic Design', 250]);
-      }
-
-      if (tattooCount > 0) {
-        const cost = tattooCount * 50;
-        total += cost;
-        breakdown.push([`Tattoos (${tattooCount} character${tattooCount > 1 ? 's' : ''})`, cost]);
       }
 
       if (xmlCount > 0) {
