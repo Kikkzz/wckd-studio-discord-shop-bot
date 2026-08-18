@@ -9,6 +9,36 @@ channel with a full order summary for staff.
 
 - `/pricelist` — posts the full, formatted price list.
 - `/shop` — posts a shop panel with a **Start Order** button.
+- `/say` — **(staff only)** sends a message through the bot to any channel, like an
+  announcement. Anyone without a staff role gets a permission-denied message.
+- `/read` — **(staff only)** scans an open Ticket V2 ticket, guesses the order
+  details from the conversation (service, member count, tattoos, graphic design,
+  XML), and opens a form pre-filled with those guesses for staff to confirm or
+  correct. On submit, staff gets a private draft with the calculated price and a
+  **Finalize & Post Receipt** button — clicking it posts an official receipt embed
+  into the ticket, tagging the customer if the bot can identify them from the
+  channel's permissions.
+  - This uses simple keyword/pattern matching, not AI — no external API key or
+    cost involved. It's a starting guess, not a guarantee; the confirmation form is
+    where staff catches anything it got wrong.
+  - **Requires the bot to have channel access to your tickets.** Ticket V2 only
+    grants access to whichever role(s) you configured in *its own* settings — your
+    bot won't automatically be able to read ticket channels. Add the bot's role to
+    Ticket V2's staff/support role list (or manually grant the bot's role **View
+    Channel** + **Read Message History** on the ticket category) or `/read` will
+    fail with a permissions error.
+- `/status` — **(staff only)** marks the studio Open or Closed. Updates the bot's
+  Discord presence (shows "Open for orders 🟢" / "Closed 🔴" under the bot's name),
+  posts an announcement embed (with an optional note, e.g. "back tomorrow 9am") to
+  the channel of your choice, and updates the `/shop` panel's status field live.
+  While closed, clicking **Start Order** on the shop panel tells customers the
+  studio isn't taking orders right now instead of starting the flow.
+  - Status resets to "Open" if the bot restarts (Railway redeploy, crash, etc.) —
+    just run `/status state:Closed` again if that happens while you're closed.
+- `/say` — **staff only**. Sends a plain message to any channel as the bot,
+  exactly like a normal message (no embed, no "bot replied" formatting) —
+  useful for announcements or replying as the studio. Restricted to whoever
+  holds a role listed in `STAFF_ROLE_IDS`.
 - Guided order flow: pick a service (Solo / Couple / Group-Gang / Family / Video Edit)
   → fill out a short form → get an instant price breakdown → confirm.
 - Automatic pricing logic matching your rules exactly:
@@ -53,6 +83,8 @@ channel with a full order summary for staff.
    - `STAFF_ROLE_IDS` — role(s) pinged + given access on new tickets (optional).
      For multiple roles, separate the IDs with commas, e.g.
      `STAFF_ROLE_IDS=123456789012345678,987654321098765432`
+   - `PRICELIST_CHANNEL_ID` — channel where the price list auto-posts every day
+     at 12:00 AM Philippine time (optional — leave blank to disable)
 
 4. **Run it**
    ```bash

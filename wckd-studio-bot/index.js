@@ -17,7 +17,8 @@ const {
 } = require('discord.js');
 
 const { calculatePrice } = require('./utils/pricing');
-const { priceListEmbed, shopPanelEmbed, orderSummaryEmbed } = require('./utils/embeds');
+const { priceListEmbed, shopPanelEmbed, statusAnnouncementEmbed, orderSummaryEmbed, draftOrderEmbed, receiptEmbed } = require('./utils/embeds');
+const { guessOrderFromTranscript } = require('./utils/orderExtractor');
 
 const {
   DISCORD_TOKEN,
@@ -45,6 +46,9 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 // In-memory session store: userId -> { service, opts, priceResult }
 const sessions = new Map();
 
+// Studio open/closed status, staff-controlled via /status. Resets to 'open' on restart.
+let studioStatus = 'open';
+
 const SERVICES = {
   solo: 'Solo Photo',
   couple: 'Couple Photo',
@@ -57,6 +61,49 @@ const SERVICES = {
 const commands = [
   new SlashCommandBuilder().setName('shop').setDescription('Open the WCKD STUDIO shop panel'),
   new SlashCommandBuilder().setName('pricelist').setDescription('View the full WCKD STUDIO price list'),
+  new SlashCommandBuilder()
+    .setName('say')
+    .setDescription('Send a message as WCKD STUDIO (staff only)')
+    .addStringOption((opt) =>
+      opt.setName('message').setDescription('The message to send').setRequired(true).setMaxLength(2000)
+    )
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to send in (defaults to the current channel)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('read')
+    .setDescription('(Staff only) Scan this ticket and draft an order confirmation/receipt')
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Ticket channel to scan (defaults to the current channel)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('status')
+    .setDescription('(Staff only) Set WCKD STUDIO as open or closed')
+    .addStringOption((opt) =>
+      opt
+        .setName('state')
+        .setDescription('Is the studio open or closed?')
+        .setRequired(true)
+        .addChoices({ name: 'Open', value: 'open' }, { name: 'Closed', value: 'closed' })
+    )
+    .addStringOption((opt) =>
+      opt.setName('note').setDescription('Optional note, e.g. "back tomorrow 9am"').setRequired(false).setMaxLength(200)
+    )
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to announce in (defaults to the current channel)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
 ].map((c) => c.toJSON());
 
 async function registerCommands() {
@@ -196,6 +243,98 @@ function yesNo(str) {
   return /^y(es)?$/i.test(str.trim());
 }
 
+function isStaffMember(member) {
+  if (!member || STAFF_ROLE_ID_LIST.length === 0) return false;
+  return member.roles.cache.some((role) => STAFF_ROLE_ID_LIST.includes(role.id));
+}
+
+// ---------- /read: scan a ticket, draft an order, and issue a receipt ----------
+// pendingScans: userId -> { channelId, transcriptExcerpt } — set right before showing
+// the correction modal, read back when the staff member submits it.
+const pendingScans = new Map();
+// draftReceipts: userId -> { channelId, service, opts, priceResult, sourceNote } — set
+// after the modal is submitted, read back when staff clicks Finalize.
+const draftReceipts = new Map();
+let receiptCounter = 0;
+
+function nextReceiptId() {
+  receiptCounter += 1;
+  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `WCKD-${datePart}-${String(receiptCounter).padStart(3, '0')}`;
+}
+
+async function findTicketCustomer(channel) {
+  try {
+    const overwrites = channel.permissionOverwrites.cache.filter((ow) => ow.type === 1); // 1 = member overwrite
+    for (const ow of overwrites.values()) {
+      if (ow.id === client.user.id) continue;
+      const member = await channel.guild.members.fetch(ow.id).catch(() => null);
+      if (!member || member.user.bot) continue;
+      if (isStaffMember(member)) continue;
+      return member.user;
+    }
+  } catch (err) {
+    console.error('Could not determine ticket customer:', err);
+  }
+  return null;
+}
+
+function buildStaffReadModal(guess) {
+  const modal = new ModalBuilder().setCustomId('read_confirm_modal').setTitle('Confirm Order From Ticket');
+
+  const service = new TextInputBuilder()
+    .setCustomId('service')
+    .setLabel('Service (solo/couple/group/family/video)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setValue(guess.service !== 'unclear' ? guess.service : '');
+
+  const members = new TextInputBuilder()
+    .setCustomId('memberCount')
+    .setLabel('Member count (group/family only)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(guess.memberCount ? String(guess.memberCount) : '');
+
+  const tattoos = new TextInputBuilder()
+    .setCustomId('tattooCount')
+    .setLabel('How many characters have tattoos?')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(guess.tattooCount ? String(guess.tattooCount) : '0');
+
+  const design = new TextInputBuilder()
+    .setCustomId('graphicDesign')
+    .setLabel('Graphic Design add-on? (yes/no)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setValue(guess.graphicDesign ? 'yes' : 'no');
+
+  const xml = new TextInputBuilder()
+    .setCustomId('xmlCount')
+    .setLabel('XML Creation - how many characters?')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(guess.xmlCount ? String(guess.xmlCount) : '0');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(service),
+    new ActionRowBuilder().addComponents(members),
+    new ActionRowBuilder().addComponents(tattoos),
+    new ActionRowBuilder().addComponents(design),
+    new ActionRowBuilder().addComponents(xml)
+  );
+
+  return modal;
+}
+
+function receiptConfirmRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('read_finalize').setLabel('Finalize & Post Receipt').setStyle(ButtonStyle.Success).setEmoji('🧾'),
+    new ButtonBuilder().setCustomId('read_discard').setLabel('Discard').setStyle(ButtonStyle.Danger).setEmoji('✖️')
+  );
+}
+
 function confirmCancelRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('order_confirm').setLabel('Confirm & Create Ticket').setStyle(ButtonStyle.Success).setEmoji('✅'),
@@ -278,13 +417,165 @@ client.on('interactionCreate', async (interaction) => {
           new ButtonBuilder().setCustomId('shop_start').setLabel('Start Order').setStyle(ButtonStyle.Primary).setEmoji('🛒'),
           new ButtonBuilder().setCustomId('shop_pricelist').setLabel('View Price List').setStyle(ButtonStyle.Secondary).setEmoji('📋')
         );
-        return interaction.reply({ embeds: [shopPanelEmbed()], components: [row] });
+        return interaction.reply({ embeds: [shopPanelEmbed(studioStatus)], components: [row] });
       }
+
+      if (interaction.commandName === 'say') {
+        if (!interaction.guild) {
+          return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+        }
+        if (!isStaffMember(interaction.member)) {
+          return interaction.reply({ content: "🚫 You don't have permission to use this command.", ephemeral: true });
+        }
+
+        const message = interaction.options.getString('message', true);
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+        if (!targetChannel?.isTextBased?.()) {
+          return interaction.reply({ content: 'Please choose a text channel.', ephemeral: true });
+        }
+
+        await targetChannel.send({ content: message });
+        return interaction.reply({ content: `✅ Message sent in ${targetChannel}.`, ephemeral: true });
+      }
+
+      if (interaction.commandName === 'read') {
+        if (!interaction.guild) {
+          return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+        }
+        if (!isStaffMember(interaction.member)) {
+          return interaction.reply({ content: "🚫 You don't have permission to use this command.", ephemeral: true });
+        }
+
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        if (!targetChannel?.isTextBased?.()) {
+          return interaction.reply({ content: 'Please choose a text channel.', ephemeral: true });
+        }
+
+        let messages;
+        try {
+          messages = await targetChannel.messages.fetch({ limit: 100 });
+        } catch (err) {
+          return interaction.reply({
+            content:
+              "Couldn't read that channel. Make sure the bot's role has **View Channel** and **Read Message History** there (check Ticket V2's permission setup for the ticket category).",
+            ephemeral: true,
+          });
+        }
+
+        const transcript = [...messages.values()]
+          .reverse()
+          .filter((m) => m.content && !m.author.bot)
+          .map((m) => `${m.author.username}: ${m.content}`)
+          .join('\n')
+          .slice(0, 4000);
+
+        if (!transcript) {
+          return interaction.reply({ content: 'No readable messages found in that ticket yet.', ephemeral: true });
+        }
+
+        const guess = guessOrderFromTranscript(transcript);
+        pendingScans.set(interaction.user.id, { channelId: targetChannel.id });
+
+        return interaction.showModal(buildStaffReadModal(guess));
+      }
+
+      if (interaction.commandName === 'status') {
+        if (!interaction.guild) {
+          return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+        }
+        if (!isStaffMember(interaction.member)) {
+          return interaction.reply({ content: "🚫 You don't have permission to use this command.", ephemeral: true });
+        }
+
+        const state = interaction.options.getString('state', true); // 'open' | 'closed'
+        const note = interaction.options.getString('note');
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+        if (!targetChannel?.isTextBased?.()) {
+          return interaction.reply({ content: 'Please choose a text channel.', ephemeral: true });
+        }
+
+        studioStatus = state;
+
+        await client.user
+          .setPresence({
+            status: state === 'open' ? 'online' : 'idle',
+            activities: [{ name: state === 'open' ? 'Open for orders 🟢' : 'Closed 🔴' }],
+          })
+          .catch((err) => console.error('Failed to update presence:', err));
+
+        const embed = statusAnnouncementEmbed({ status: state, note, staffTag: interaction.user.tag });
+        await targetChannel.send({ embeds: [embed] });
+
+        return interaction.reply({ content: `✅ Studio marked **${state.toUpperCase()}** and announced in ${targetChannel}.`, ephemeral: true });
+      }
+    }
+
+    // Modal: staff correcting the /read guess
+    if (interaction.isModalSubmit() && interaction.customId === 'read_confirm_modal') {
+      const pending = pendingScans.get(interaction.user.id);
+      pendingScans.delete(interaction.user.id);
+
+      if (!pending) {
+        return interaction.reply({ content: 'This form expired — please run `/read` again.', ephemeral: true });
+      }
+
+      const rawService = interaction.fields.getTextInputValue('service').trim().toLowerCase();
+      const serviceMap = { solo: 'solo', couple: 'couple', group: 'group', gang: 'group', family: 'family', video: 'video' };
+      const service = serviceMap[rawService];
+
+      if (!service) {
+        return interaction.reply({
+          content: `Unrecognized service "${rawService}". Please run \`/read\` again and enter one of: solo, couple, group, family, video.`,
+          ephemeral: true,
+        });
+      }
+
+      const opts = {};
+      opts.graphicDesign = yesNo(interaction.fields.getTextInputValue('graphicDesign'));
+      const tattooRaw = interaction.fields.getTextInputValue('tattooCount');
+      opts.tattooCount = tattooRaw ? parseInt(tattooRaw, 10) || 0 : 0;
+
+      if (service === 'group' || service === 'family') {
+        const memberRaw = interaction.fields.getTextInputValue('memberCount');
+        opts.memberCount = parseInt(memberRaw, 10) || (service === 'group' ? 10 : 5);
+        const xmlRaw = interaction.fields.getTextInputValue('xmlCount');
+        opts.xmlCount = xmlRaw ? parseInt(xmlRaw, 10) || 0 : 0;
+      }
+
+      let priceResult;
+      try {
+        priceResult = calculatePrice(service, opts);
+      } catch (err) {
+        return interaction.reply({ content: `Something went wrong: ${err.message}`, ephemeral: true });
+      }
+
+      draftReceipts.set(interaction.user.id, {
+        channelId: pending.channelId,
+        service,
+        priceResult,
+      });
+
+      const embed = draftOrderEmbed({
+        serviceLabel: SERVICES[service],
+        breakdown: priceResult.breakdown,
+        total: priceResult.total,
+        sourceNote: `Scanned from <#${pending.channelId}>`,
+      });
+
+      return interaction.reply({ embeds: [embed], components: [receiptConfirmRow()], ephemeral: true });
     }
 
     // Buttons
     if (interaction.isButton()) {
       if (interaction.customId === 'shop_start') {
+        if (studioStatus === 'closed') {
+          return interaction.reply({
+            content: '🔴 WCKD STUDIO is currently closed and not accepting orders. Please check back later!',
+            ephemeral: true,
+          });
+        }
         return interaction.reply({
           content: 'What would you like to order?',
           components: [serviceSelectRow()],
@@ -299,6 +590,47 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId === 'order_cancel') {
         sessions.delete(interaction.user.id);
         return interaction.update({ content: '❌ Order cancelled.', embeds: [], components: [] });
+      }
+
+      if (interaction.customId === 'read_discard') {
+        draftReceipts.delete(interaction.user.id);
+        return interaction.update({ content: '❌ Draft discarded — nothing was posted.', embeds: [], components: [] });
+      }
+
+      if (interaction.customId === 'read_finalize') {
+        const draft = draftReceipts.get(interaction.user.id);
+        if (!draft) {
+          return interaction.reply({ content: 'This draft expired — please run `/read` again.', ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+
+        const targetChannel = await client.channels.fetch(draft.channelId).catch(() => null);
+        if (!targetChannel) {
+          draftReceipts.delete(interaction.user.id);
+          return interaction.editReply({ content: 'Could not find that ticket channel anymore — draft discarded.', embeds: [], components: [] });
+        }
+
+        const customer = await findTicketCustomer(targetChannel);
+
+        const embed = receiptEmbed({
+          receiptId: nextReceiptId(),
+          serviceLabel: SERVICES[draft.service],
+          breakdown: draft.priceResult.breakdown,
+          total: draft.priceResult.total,
+          customer,
+          issuedBy: interaction.user,
+          sourceNote: 'Generated from ticket transcript',
+        });
+
+        await targetChannel.send({ embeds: [embed] });
+        draftReceipts.delete(interaction.user.id);
+
+        return interaction.editReply({
+          content: `✅ Receipt posted in ${targetChannel}.`,
+          embeds: [],
+          components: [],
+        });
       }
 
       if (interaction.customId === 'order_confirm') {
